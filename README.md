@@ -1,33 +1,42 @@
 # Olist E-Commerce End-to-End Analytics (MySQL & Power BI)
 
-Proyek analisis data end-to-end atas dataset e-commerce publik **Olist** (`db_olist`), menggabungkan **MySQL** (audit kualitas data, validasi nilai transaksi per status pesanan, pembangunan *view* dan rekonsiliasi data, performa logistik, gradasi dampak keterlambatan pengiriman terhadap ulasan pelanggan, analisis rute/`state` dan penjual, rasio ongkos kirim tertimbang terhadap harga produk, serta tingkat pembelian ulang) dengan **Power BI** (pemodelan data bintang, penanganan *cross-filtering* antar-granularitas, dan *dashboard* interaktif 16:9 berbasis *Delivered Orders Scope*).
+Analisis end-to-end atas dataset publik **Olist** (`db_olist`): **MySQL** untuk audit data, view per pesanan, analisis keterlambatan, ulasan, rasio ongkir, dan *repeat purchase*; **Power BI** untuk model bintang dan *dashboard* interaktif.
 
 ## Pertanyaan Bisnis Utama
-Apakah keterlambatan pengiriman menurunkan kepuasan pelanggan (skor ulasan dan proporsi ulasan buruk), serta bagaimana pengaruhnya terhadap tingkat pembelian ulang (*repeat purchase rate*) dan keputusan operasional pada transaksi *delivered* di platform **Olist**?
+
+Apakah keterlambatan pengiriman menurunkan kepuasan pelanggan (skor ulasan dan proporsi ulasan buruk), dan apakah itu berkaitan dengan pembelian ulang serta keputusan operasional pada pesanan *delivered* di Olist?
 
 ## Ringkasan Eksekutif
-Keterlambatan pengiriman memang terjadi pada sebagian kecil pesanan *delivered* (`6.77%` dari `96,470` pesanan bertanggal valid; `6,534` pesanan terlambat), tetapi dampaknya terhadap kepuasan pelanggan sangat tajam—rata-rata skor ulasan turun dari **`4.29`** (tepat waktu/lebih cepat) menjadi **`2.27`** (terlambat), sementara ulasan buruk (`<= 2`) melonjak hingga **`62.4%`** pada pesanan terlambat ber-ulasan dibanding **`9.2%`** pada pesanan tepat waktu (dengan pola serupa pada *state* `SP` dan skenario potensi pengurangan hingga **`3,390`** ulasan buruk jika keterlambatan ditekan), sekaligus berkaitan dengan *repeat purchase rate* yang masih rendah (`3.00%` secara keseluruhan; `3.04%` pada pesanan pertama tepat waktu vs. `2.52%` pada pesanan pertama terlambat). Oleh karena itu, perbaikan operasional sebaiknya diprioritaskan pada rute/*state* dan penjual dengan tingkat keterlambatan tinggi serta skema ongkir/bundling yang lebih relevan bagi pelanggan.
+
+- Hanya **6.77%** dari 96,470 pesanan *delivered* yang terlambat, tetapi **62.4%** pesanan terlambat ber-ulasan mendapat skor buruk (≤ 2), dibanding **9.2%** pada pesanan tepat waktu. Skor rata-rata turun dari **4.29** menjadi **2.27**.
+- Pesanan terlambat menyumbang **32.5%** dari seluruh ulasan buruk, dan pola yang sama muncul di SP, RJ, dan MG. Pelanggan yang pesanan pertamanya terlambat membeli ulang sedikit lebih jarang (**2.52% vs 3.04%**); repeat rate keseluruhan hanya **3.00%**.
+- Keterlambatan lebih berkaitan dengan waktu kurir ke state tujuan daripada proses penjual: RJ memiliki 12.8% pesanan tetapi 22.9% keterlambatan, dan penjual tidak terkonsentrasi. Prioritas: evaluasi mitra kurir dan estimasi tiba untuk RJ (lalu BA), serta uji bundling atau ambang ongkir pada kategori bervolume besar dengan rasio ongkir tinggi.
+- Jika hubungan ini sepenuhnya sebab-akibat, menekan keterlambatan dapat menghindari hingga ±3,390 ulasan buruk (batas atas ilustratif).
+
+**Summary (English):** Only 6.8% of 96,470 delivered orders arrive late, yet 62.4% of those get a bad review (score ≤ 2) versus 9.2% for on-time orders, and late orders generate 32.5% of all bad reviews. The pattern holds in SP, RJ, and MG. Delays are associated with courier transit time, concentrated in RJ, rather than with a few sellers.
 
 ---
 
 ## Sumber & Cakupan Data
 
-- **Sumber Data:** Dataset publik [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) di **Kaggle** (data mentah tidak disertakan di repositori ini).
-- **Cakupan Analisis:** Seluruh metrik pendapatan, pengiriman, rasio ongkir, ulasan, dan *repeat purchase* difokuskan pada pesanan berstatus `delivered` dengan validasi nilai/tanggal yang sesuai, sementara status non-*delivered* dianalisis pada tahap audit untuk mencegah overestimasi realisasi.
+- **Sumber:** [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) di **Kaggle** (data 2016–2018; data mentah tidak disertakan di repositori ini).
+- **Cakupan:** Metrik pendapatan, pengiriman, ongkir, ulasan, dan *repeat purchase* memakai pesanan berstatus `delivered`. Status lain hanya dipakai pada audit. Tren bulanan memakai bulan lengkap saja (2017-01 s.d. 2018-08).
+- **Mata uang:** semua nilai uang dalam **R$ (real Brasil, BRL)**.
 
 ---
 
 ## Ringkasan KPI Utama
 
-| KPI / Metrik | Temuan Utama | Catatan Cakupan |
+| KPI | Nilai | Definisi / Cakupan |
 | :--- | :--- | :--- |
-| **Delivered GMV** | `R$ 13,221,498.11` (`96,478` pesanan) | Cakupan pesanan `delivered` (`Year Month = All`) pada *dashboard* Power BI dan validasi *delivered* (`BRL`) |
-| **Avg Review Score** | **`4.16`** | Rata-rata skor ulasan (`1–5`) pada cakupan pesanan `delivered` |
-| **Selisih Waktu Pengiriman vs. Estimasi** | Rata-rata **`-11.88` hari** (`89,936` tepat waktu/lebih cepat vs. `6,534` terlambat dari `96,470` pesanan) | Selisih `DATEDIFF` aktual dikurangi estimasi pada pesanan `delivered` |
-| **Skor Ulasan vs. Ketepatan Waktu** | **`4.29`** (tepat waktu/lebih cepat, `89,943` ulasan) vs. **`2.27`** (terlambat, `6,409` ulasan) | Pesanan `delivered` yang terhubung dengan `order_reviews` |
-| **Late Delivery % & Bad Review %** | **`6.77%`** terlambat (`Late Delivery %`) & **`13.44%`** ulasan buruk (`Bad Review %`) | Ringkasan metrik risiko operasional dan ulasan pada cakupan pesanan `delivered` |
-| **Weighted Freight Ratio** | **`16.63%`** keseluruhan (`135.49%` tertinggi pada `dvds_blu_ray` di analisis kategori rasio ongkir) | Rasio ongkos kirim tertimbang terhadap nilai produk (`delivered`, `BRL`) |
-| **Repeat Purchase Rate** | **`3.00%`** (`2,801` pelanggan repeat dari `93,358` pelanggan unik) | Berdasarkan `customer_unique_id` pada pesanan berstatus `delivered` |
+| **Delivered GMV** | **R$ 13,221,498.11** (96,478 pesanan) | Jumlah `price` item pada pesanan *delivered*, tanpa ongkir |
+| **Avg Review Score** | **4.16** | Rata-rata skor (1–5) pesanan *delivered* ber-ulasan |
+| **Late Delivery %** | **6.77%** | 6,534 dari 96,470 pesanan *delivered* bertanggal terima valid |
+| **Estimasi vs aktual** | **24.4 hari** vs **12.5 hari** | Rata-rata estimasi sejak pembelian vs lama kirim aktual (selisih rata-rata −11.88 hari); pesanan terlambat rata-rata **10.6 hari** melewati estimasi |
+| **Skor ulasan vs ketepatan** | **4.29** (tepat waktu, 89,442 pesanan) vs **2.27** (terlambat, 6,381 pesanan) | Hanya pesanan yang punya ulasan (494 tepat waktu dan 153 terlambat tidak punya ulasan) |
+| **Bad Review %** | **12.8%** | Pesanan *delivered* ber-ulasan dengan skor rata-rata ≤ 2 (12.77% per pesanan; 12.81% per ulasan) |
+| **Weighted Freight Ratio** | **16.63%** | Total ongkir R$ 2,198,276 ÷ GMV R$ 13,221,498 |
+| **Repeat Purchase Rate** | **3.00%** | 2,801 dari 93,358 pelanggan unik (`customer_unique_id`), sepanjang periode data |
 
 ![Olist E-Commerce Performance Dashboard](olist_dashboard.png)
 
@@ -35,88 +44,163 @@ Keterlambatan pengiriman memang terjadi pada sebagian kecil pesanan *delivered* 
 
 ## Temuan Utama & Rekomendasi Bisnis
 
-### 1. Audit Kualitas Data, Validasi Status & Metode Pembayaran (`01_data_cleaning_and_audit.sql` & `03_business_and_operational_analysis.sql`)
-- **Integritas harga `order_items`:** Pemeriksaan `price` (bertipe teks) menemukan `0` nilai `NULL`/kosong dan `0` nilai `<= 0`, sehingga kolom harga layak dipakai untuk agregasi finansial.
-- **Pemisahan status pesanan:** Nilai transaksi tidak hanya berada pada status `delivered` (`R$ 13,221,498.11`), tetapi juga muncul pada status non-*delivered* seperti `shipped`, `canceled`, `invoiced`, dan `processing`. Memisahkan `delivered` mencegah overestimasi pendapatan terealisasi.
-- **Distribusi metode pembayaran (`COUNT(DISTINCT order_id)`):** Pembayaran didominasi `credit_card` (`76,505` pesanan unik dari `76,795` baris pembayaran; `R$ 12,542,084.19`) dan `boleto` (`19,784` pesanan unik dan `19,784` baris pembayaran; `R$ 2,869,361.27`), diikuti `voucher` (`3,866` pesanan unik vs. `5,775` baris pembayaran; `R$ 379,436.87`) dan `debit_card` (`1,528` pesanan unik vs. `1,529` baris pembayaran; `R$ 217,989.79`). Selisih antara jumlah pesanan unik dan jumlah baris pembayaran—terutama pada `credit_card` dan `voucher`—menunjukkan satu pesanan dapat terdiri dari beberapa baris atau kombinasi pembayaran.
+### 1. Kualitas Data & Cakupan (`01_data_cleaning_and_audit.sql`)
+- **Nilai produk juga ada pada status non-*delivered*** (`shipped`, `canceled`, `invoiced`, `processing`). Memisahkan *delivered* mencegah overestimasi pendapatan terealisasi.
+- **8 pesanan *delivered* tanpa tanggal terima** dikeluarkan dari analisis keterlambatan (96,478 → 96,470).
+- **Impor awal tabel `products` terpotong di 4,096 baris**, sehingga 98,511 dari 112,650 item (87.4%) tidak punya produk dan hampir seluruh GMV berlabel `unknown`. Masalah ini terdeteksi lewat ranking kategori, tabel diimpor ulang, dan audit kelengkapan impor ditambahkan.
 
-### 2. Performa Logistik, Gradasi Keterlambatan & Konsentrasi Rute/Penjual
-- **Performa pengiriman secara keseluruhan:** Dari `96,470` pesanan `delivered` dengan tanggal valid (`8` pesanan `delivered` tanpa tanggal terima), `6,534` pesanan mengalami keterlambatan (`6.77%` pada cakupan *delivered*) sementara rata-rata selisih keseluruhan berada di **`-11.88` hari** karena estimasi pengiriman cenderung longgar.
-- **Gradasi keterlambatan terhadap skor & ulasan buruk (`<= 2`):**
-  - **Tepat waktu / lebih cepat (`89,442` pesanan):** rata-rata skor **`4.29`**, porsi ulasan buruk **`9.2%`**.
-  - **Telat 1–3 hari (`1,852` pesanan):** rata-rata skor **`3.29`**, porsi ulasan buruk **`32.2%`**.
-  - **Telat 4–7 hari (`1,748` pesanan):** rata-rata skor **`2.11`**, porsi ulasan buruk **`67.6%`**.
-  - **Telat > 7 hari (`2,781` pesanan):** rata-rata skor **`1.70`**, porsi ulasan buruk **`79.2%`**.
-- **Sebaran lokasi & distribusi skor ulasan:** Volume pesanan terkonsentrasi pada pusat kota dan negara bagian utama pelanggan, sementara distribusi skor ulasan memperlihatkan bahwa meskipun skor tinggi mendominasi secara keseluruhan (`Avg Review Score` **`4.16`** pada cakupan *delivered*), proporsi ulasan buruk (`<= 2`) melonjak tajam seiring bertambahnya hari keterlambatan.
-- **Konsentrasi rute (`customer_state`) & penjual (`seller_id`):** Pada negara bagian dengan keterlambatan tinggi seperti `AL` (`21.4%` terlambat dari `397` pesanan; rata-rata `3.4` hari proses penjual vs. `21.1` hari kurir) dan `MA` (`17.4%` terlambat dari `717` pesanan; `3.6` hari proses penjual vs. `17.9` hari kurir), waktu pengiriman kurir lebih panjang dibanding proses penjual. Pada tingkat penjual (`>= 30` pesanan `delivered`), tingkat keterlambatan tertinggi mencapai `32.6%` (`43` pesanan) dan `30.1%` (`73` pesanan).
-- **Rekomendasi:** Prioritaskan pemantauan pengiriman pada rute/`state` dengan durasi kurir panjang (`AL`, `MA`) dan evaluasi SLA penjual ber-keterlambatan tinggi, serta sesuaikan akurasi estimasi tanggal tiba dengan waktu tempuh aktual.
+### 2. Keterlambatan, Ulasan & Konsentrasi (`03_business_and_operational_analysis.sql`)
+- **Pengiriman secara keseluruhan:** estimasi tiba rata-rata 24.4 hari, aktual 12.5 hari. Estimasi sangat longgar, namun 6.77% pesanan tetap terlambat, dengan rata-rata 10.6 hari melewati estimasi, jadi keterlambatannya tidak ringan.
+- **Gradasi keterlambatan:**
 
-### 3. Beban Ongkos Kirim vs. Harga Produk & Kategori Teratas
-- Pada kategori bernilai satuan rendah seperti `dvds_blu_ray` (rata-rata harga `R$ 15.90`, rata-rata ongkir `R$ 21.71`), rata-rata biaya kirim mencapai **`135.49%`** dari harga barang, diikuti kategori seperti `fashion_underwear_beach` (`75.63%`) dan `signaling_and_security` (`58.18%`), sementara perhitungan tertimbang dengan batas volume (`>= 500` item) membantu menyaring kategori kecil.
-- Pada *dashboard* **Top 10 Product Categories by Delivered GMV** (cakupan `delivered`, mengecualikan `(Blank)` dan diurutkan menurun), kategori seperti `health_beauty`, `watches_gifts`, `bed_bath_table`, dan `sports_leisure` memimpin nilai GMV, dengan *tooltip* `Weighted Freight Ratio` (misalnya `22.23%` pada `housewares` vs. `16.63%` rata-rata tertimbang keseluruhan) untuk memantau proporsi biaya kirim per kategori.
-- **Rekomendasi:** Uji skema *bundling* multi-item, batas minimum belanja untuk promo ongkir, atau opsi pengiriman hemat pada kategori berharga rendah agar biaya kirim tidak terasa membebani saat *checkout*.
+| Kelompok | Pesanan | Skor rata-rata | Ulasan buruk (≤ 2) |
+| :--- | ---: | ---: | ---: |
+| Tepat waktu / lebih cepat | 89,442 | 4.29 | 9.2% |
+| Telat 1–3 hari | 1,852 | 3.29 | 32.2% |
+| Telat 4–7 hari | 1,748 | 2.11 | 67.6% |
+| Telat > 7 hari | 2,781 | 1.70 | 79.2% |
+
+- **Uji ketahanan (skor rata-rata / % ulasan buruk):** pola turun-naik yang sama muncul di tiga state terbesar (setiap sel ≥ 152 pesanan).
+
+| Kelompok | Nasional | SP | RJ | MG |
+| :--- | :--- | :--- | :--- | :--- |
+| Tepat waktu | 4.29 / 9.2% | 4.33 / 8.6% | 4.24 / 10.9% | 4.28 / 9.5% |
+| Telat 1–3 hari | 3.29 / 32.2% | 3.40 / 29.1% | 3.04 / 40.3% | 3.32 / 30.5% |
+| Telat 4–7 hari | 2.11 / 67.6% | 2.19 / 64.6% | 1.91 / 74.7% | 1.97 / 69.7% |
+| Telat > 7 hari | 1.70 / 79.2% | 1.84 / 75.5% | 1.53 / 83.8% | 1.74 / 77.8% |
+
+- **Dampak (skenario bersyarat):** 6,381 pesanan terlambat ber-ulasan (±6.7% pesanan ber-ulasan) menyumbang **32.5%** seluruh ulasan buruk. Jika hubungan keterlambatan dan ulasan buruk sepenuhnya sebab-akibat dan seluruh keterlambatan bisa dihilangkan, sekitar **3,390** ulasan buruk bisa dihindari (batas atas).
+- **Konsentrasi per state tujuan:** keterlambatan terpusat pada state bervolume besar dan berwaktu kurir panjang. Lima state teratas menyumbang 69.7% keterlambatan.
+
+| State tujuan | Pesanan | % terlambat | % dari semua keterlambatan | Hari penjual | Hari kurir |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| SP | 40,494 | 4.5% | 27.9% | 3.1 | 5.6 |
+| RJ | 12,350 | 12.1% | 22.9% | 3.3 | 11.9 |
+| MG | 11,354 | 4.6% | 7.9% | 3.2 | 8.7 |
+| BA | 3,256 | 12.2% | 6.1% | 3.3 | 16.0 |
+| RS | 5,344 | 6.1% | 5.0% | 3.2 | 12.0 |
+| MA | 717 | 17.4% | 1.9% | 3.6 | 17.9 |
+| AL | 397 | 21.4% | 1.3% | 3.4 | 21.1 |
+
+  SP besar karena volumenya (42.0% pesanan, tingkat terlambat di bawah rata-rata). RJ adalah masalah utama: 12.8% pesanan tetapi 22.9% keterlambatan, dan 58% pesanan terlambat ber-ulasan di RJ melewati 7 hari (SP 30%, MG 35%). AL dan MA punya persen tertinggi, tetapi hanya 3.2% dari seluruh keterlambatan. Waktu proses penjual hampir sama di semua state (2.8–3.7 hari), sedangkan waktu kurir berkisar 5.6 sampai 25.6 hari.
+- **Konsentrasi per penjual:** dari 2,970 penjual, keterlambatan hanya sedikit lebih terkonsentrasi daripada volume pesanan.
+
+| Top N penjual (menurut jumlah keterlambatan) | % dari semua keterlambatan | % dari semua pesanan |
+| :--- | ---: | ---: |
+| 10 | 15.7% | 13.7% |
+| 50 | 38.1% | 32.0% |
+| 100 | 50.5% | 42.0% |
+| 200 | 65.4% | 55.2% |
+| 500 | 84.7% | 73.4% |
+
+- **Rekomendasi:**
+  1. Evaluasi mitra kurir dan akurasi estimasi tiba untuk state tujuan bervolume besar dengan keterlambatan tinggi, terutama **RJ**, lalu **BA**. Sebagai skenario ilustratif, jika persen terlambat RJ turun dari 12.1% ke sekitar 4.5% (tingkat SP/MG), sekitar 940 pesanan terlambat (±14% dari total) bisa dihindari.
+  2. Tinjau estimasi tanggal tiba per state: estimasi nasional rata-rata terlalu longgar (24.4 vs 12.5 hari), tetapi sebagian pesanan di rute lambat tetap melewatinya.
+  3. Jadikan SLA penjual prioritas kedua, karena keterlambatan menyebar di banyak penjual. State kecil dengan persen tinggi (AL, MA) cukup dipantau.
+
+### 3. Beban Ongkos Kirim & Kategori Produk
+- **Keseluruhan:** ongkir setara **16.63%** dari nilai produk (R$ 2,198,276 dari GMV R$ 13,221,498).
+- **Sepuluh kategori terbesar** menyumbang 62.4% GMV (lima teratas 39.7%):
+
+| Kategori | GMV (R$) | % GMV | Ongkir vs harga |
+| :--- | ---: | ---: | ---: |
+| health_beauty | 1,233,132 | 9.3% | 14.5% |
+| watches_gifts | 1,166,177 | 8.8% | 8.4% |
+| bed_bath_table | 1,023,435 | 7.7% | 19.7% |
+| sports_leisure | 954,853 | 7.2% | 17.1% |
+| computers_accessories | 888,725 | 6.7% | 16.2% |
+| furniture_decor | 711,928 | 5.4% | 23.7% |
+| housewares | 615,629 | 4.7% | 23.2% |
+| cool_stuff | 610,204 | 4.6% | 13.4% |
+| auto | 578,967 | 4.4% | 15.6% |
+| toys | 471,286 | 3.6% | 16.1% |
+
+- **Rasio ongkir tertinggi** (kategori ≥ 500 item): `electronics` 29.5% (2,729 item, GMV R$ 155,044), `office_furniture` 25.0%, `furniture_decor` 23.7%, `housewares` 23.2%, dan `telephony` 22.4%. Rasio tinggi muncul pada barang berharga satuan rendah (rata-rata `electronics` ±R$ 57 per item) dan, kemungkinan, barang besar (mis. furnitur); keterkaitan dengan berat atau ukuran produk belum dianalisis. Kategori berharga tinggi seperti `watches_gifts` hanya 8.4%.
+- **Rekomendasi:** Uji bundling multi-item, ambang minimum belanja untuk promo ongkir, atau opsi pengiriman hemat pada kategori bervolume besar dengan rasio di atas rata-rata (`bed_bath_table`, `furniture_decor`, `housewares`): ±17.8% GMV tetapi sekitar 23% total ongkir (dihitung dari rasio yang dibulatkan). Kategori berrasio ekstrem tetapi kecil, seperti `electronics` (±1.2% GMV), berdampak lebih kecil.
 
 ### 4. Retensi Pelanggan / *Repeat Purchase Rate*
-- Dari `93,358` pelanggan unik (`customer_unique_id`) dengan pesanan `delivered`, hanya `2,801` pelanggan (**`3.00%`**) yang melakukan lebih dari satu transaksi *delivered*.
-- Berdasarkan pengalaman pesanan pertama, pelanggan dengan pesanan pertama tepat waktu memiliki *repeat purchase rate* **`3.04%`** (`86,995` pelanggan), sedikit lebih tinggi dibanding pelanggan dengan pesanan pertama terlambat sebesar **`2.52%`** (`6,355` pelanggan).
-- **Rekomendasi:** Jaga ketepatan waktu pengiriman sejak pesanan pertama dan dorong pembelian kedua melalui kampanye *follow-up* pasca-pengiriman serta rekomendasi produk komplementer.
+- Dari 93,358 pelanggan unik dengan pesanan *delivered*, hanya 2,801 (**3.00%**) membeli lebih dari sekali (sepanjang periode data, bukan retensi dalam jendela waktu tertentu).
+- Pelanggan dengan pesanan pertama tepat waktu membeli ulang **3.04%** (86,995 pelanggan) vs **2.52%** (6,355 pelanggan) pada pesanan pertama terlambat. Selisihnya kecil (0.52 poin persentase).
+- **Rekomendasi:** Jaga ketepatan pengiriman sejak pesanan pertama dan dorong pembelian kedua melalui kampanye *follow-up* pasca-pengiriman serta rekomendasi produk komplementer.
 
 ---
 
-## Catatan Metodologi & Teknis (SQL & Power BI)
+## Catatan Metodologi & Teknis
 
-- **Konversi tipe data & pembulatan (SQL):** Kolom numerik dan tanggal dikonversi secara eksplisit menggunakan `CAST(... AS DECIMAL(10,2))` atau `CAST(... AS DATETIME)` dan dirapikan dengan `ROUND(..., 2)`.
-- **Antiganda pada level pesanan (SQL):** Penggunaan `COUNT(DISTINCT o.order_id)` saat menggabungkan `orders` dan `order_items` (serta pada analisis metode pembayaran di `order_payments`) mencegah satu pesanan terhitung lebih dari satu kali.
-- **Identitas pelanggan unik (SQL):** Analisis *repeat purchase* menggunakan `c.customer_unique_id` alih-alih `c.customer_id` agar pembelian berulang oleh pelanggan yang sama teridentifikasi secara akurat.
-- **Pemodelan bintang & `CROSSFILTER` antar-granularitas (Power BI):** Model data menggunakan skema bintang yang menghubungkan `Fact_Orders` (level pesanan), `Fact_OrderItems` (level item pesanan), `Dim_Products`, `Dim_Date`, dan `Dim_Sellers`. Karena `Delivered GMV` dievaluasi pada level pesanan (`Fact_Orders`) sementara kategori produk berada di `Dim_Products` yang berelasi *single-direction* melalui `Fact_OrderItems`, diterapkan `CROSSFILTER(Fact_OrderItems[order_id], Fact_Orders[order_id], Both)` secara eksplisit di dalam DAX `Delivered GMV` agar *filter* kategori mengalir akurat tanpa mengaktifkan *bidirectional cross-filtering* permanen pada model.
-- **Struktur *Dashboard* & Validasi Visual (Power BI):** Kanvas 16:9 dengan judul *Olist E-Commerce Performance*, subjudul *Delivered Orders Scope*, *slicer* `Year Month`, baris 7 kartu KPI (*accent bar* biru untuk performa/retensi dan kuning/jingga untuk risiko/biaya), *combo chart* `Delivered GMV and Delivered Orders` (`2016-09` s.d. `2018-08`), *line & column chart* `Late Delivery % and Bad Review % Trend`, serta *clustered bar chart* `Top 10 Product Categories by Delivered GMV` (`Top N = 10` *descending*, tanpa `(Blank)`, dengan *tooltip* `Weighted Freight Ratio`).
+- **View per pesanan (SQL):** `v_order_base` dan `v_order_summary` menghasilkan satu baris per `order_id`. Item dan ulasan diagregasi per pesanan sebelum digabung, dan kolom teks dikonversi sekali dengan `CAST`.
+- **Antiganda:** `COUNT(DISTINCT order_id)` dipakai saat menggabungkan tabel level item atau pembayaran; skor ulasan per pesanan adalah rata-rata ulasan pesanan itu.
+- **Identitas pelanggan:** analisis *repeat purchase* memakai `customer_unique_id`, bukan `customer_id`.
+- **Pemodelan bintang & `CROSSFILTER` (Power BI):** `Fact_Orders` (level pesanan), `Fact_OrderItems` (level item), `Dim_Products`, `Dim_Date`, dan `Dim_Sellers`. `Delivered GMV` dihitung pada level pesanan dengan `CROSSFILTER(Fact_OrderItems[order_id], Fact_Orders[order_id], Both)` agar filter kategori mengalir tanpa *bidirectional cross-filtering* permanen.
+- **Struktur *dashboard*:** kanvas 16:9 dengan *slicer* `Year Month`, tujuh kartu KPI, *combo chart* `Delivered GMV and Delivered Orders`, *chart* `Late Delivery % and Bad Review % Trend` (2017-01 s.d. 2018-08), dan *bar chart* `Top 10 Product Categories by Delivered GMV` dengan *tooltip* `Weighted Freight Ratio`.
 
-File laporan interaktif tersedia pada [dashboard_ecommerce_performance.pbix](dashboard_ecommerce_performance.pbix).
+File laporan interaktif: [dashboard_ecommerce_performance.pbix](dashboard_ecommerce_performance.pbix).
 
 ---
 
 ## Metric Dictionary (Kamus Metrik)
 
-| Metrik / Kolom | Definisi & Formula | Cakupan & Catatan |
+| Metrik | Definisi & Formula | Cakupan & Catatan |
 | :--- | :--- | :--- |
-| **Delivered GMV / Nilai Produk** | `CALCULATE(SUM(Fact_Orders[gmv]), Fact_Orders[order_status] = "delivered", CROSSFILTER(Fact_OrderItems[order_id], Fact_Orders[order_id], Both))` (di SQL: `SUM(CAST(price AS DECIMAL(10, 2)))` pada `delivered`) | Nilai GMV / produk dalam **R$ (BRL)** pada cakupan pesanan `delivered`, dengan *cross-filter* eksplisit agar responsif terhadap *filter* kategori produk. |
-| **Avg Review Score** | Rata-rata skor ulasan (`1–5`) pada pesanan `delivered` | Mengukur kepuasan pelanggan pada transaksi yang terkirim (`4.16` keseluruhan). |
-| **Weighted Freight Ratio / Rasio Ongkir Tertimbang** | `100 * SUM(ongkir) / SUM(gmv)` | Rasio total ongkir terhadap total nilai produk pada pesanan `delivered` (`price > 0`), dengan batas minimum volume item (`16.63%` keseluruhan). |
-| **Selisih Pengiriman (`hari_telat`)** | `DATEDIFF(tgl_terima, tgl_estimasi)` | Negatif/nol = tiba lebih cepat atau tepat estimasi; positif (`> 0`) = terlambat melewati tanggal estimasi. |
-| **Late Delivery % (`pct_terlambat`)** | `100 * AVG(hari_telat > 0)` | Proporsi pesanan `delivered` bertanggal valid yang tiba melewati tanggal estimasi (`6.77%` pada cakupan *delivered*). |
-| **Bad Review % (`pct_ulasan_buruk`)** | `100 * AVG(skor_ulasan <= 2)` | Proporsi ulasan bernilai `1` atau `2` (skala `1–5`) pada cakupan/kelompok keterlambatan (`13.44%` keseluruhan). |
-| **Repeat Purchase Rate** | `100 * AVG(jml_order_delivered > 1)` | Proporsi pelanggan unik (`customer_unique_id`) dengan lebih dari 1 pesanan berstatus `delivered` (`3.00%`). |
+| **Delivered GMV** | SQL: `SUM(CAST(price AS DECIMAL(10,2)))` pada *delivered*. DAX: `CALCULATE(SUM(Fact_Orders[gmv]), Fact_Orders[order_status] = "delivered", CROSSFILTER(Fact_OrderItems[order_id], Fact_Orders[order_id], Both))` | R$ (BRL), tanpa ongkir. GMV per kategori di SQL dihitung dari `price` level item. |
+| **Avg Review Score** | Rata-rata skor ulasan per pesanan | Pesanan *delivered* ber-ulasan, skala 1–5 |
+| **Bad Review %** | `100 * AVG(skor_ulasan <= 2)` | Per pesanan (skor rata-rata ≤ 2); 12.77% per pesanan dan 12.81% per ulasan |
+| **Hari terlambat (`hari_telat`)** | `DATEDIFF(tgl_terima, tgl_estimasi)` | ≤ 0 tepat waktu atau lebih cepat; > 0 terlambat |
+| **Late Delivery %** | `100 * AVG(hari_telat > 0)` | Pesanan *delivered* bertanggal terima valid |
+| **Hari kirim / proses penjual / kurir** | `DATEDIFF(tgl_terima, tgl_beli)` / `DATEDIFF(tgl_kurir, tgl_beli)` / `DATEDIFF(tgl_terima, tgl_kurir)` | Hari penjual = beli → serah ke kurir; hari kurir = serah → diterima |
+| **Weighted Freight Ratio** | `100 * SUM(ongkir) / SUM(gmv)` | Total ongkir ÷ total nilai produk. Ambang ≥ 500 item hanya dipakai pada ranking kategori. |
+| **Repeat Purchase Rate** | `100 * AVG(jml_order_delivered > 1)` | Pelanggan unik dengan > 1 pesanan *delivered*, sepanjang periode data |
 
 ---
 
 ## Decision Log (Catatan Keputusan Analisis)
 
-- **Memisahkan pesanan `delivered` dari status non-*delivered*:** Pesanan `shipped`, `invoiced`, `processing`, dan `canceled` diaudit terpisah agar metrik pendapatan, pengiriman, ulasan, dan retensi hanya mencerminkan transaksi yang benar-benar diterima pelanggan.
-- **Mengeluarkan `8` pesanan `delivered` tanpa tanggal terima pada analisis keterlambatan (`96,478` menjadi `96,470`):** Pesanan tanpa `order_delivered_customer_date` tidak dapat dihitung selisih hari pengirimannya (`hari_telat`), sehingga dicatat eksplisit agar selisih jumlah pesanan transparan.
-- **Menyusun *view* per pesanan (`v_order_base` & `v_order_summary`) dan menguji rekonsiliasi:** Mengagregasi item dan ulasan per `order_id` sebelum digabung mencegah duplikasi baris dan memusatkan konversi tipe data, lalu diverifikasi melalui uji rekonsiliasi jumlah baris dan total GMV.
-- **Menggunakan `customer_unique_id` untuk analisis retensi:** Menghindari distorsi perhitungan karena satu pelanggan dapat memiliki lebih dari satu `customer_id` pada skema Olist.
-- **Memakai `LEFT JOIN` dengan label `'unknown'` (SQL) dan mengecualikan `(Blank)` pada Top 10 kategori *dashboard* (Power BI):** Di SQL, `LEFT JOIN` dengan `'unknown'` menjaga total GMV dan rasio ongkir tidak hilang; di *visual* Top 10 kategori Power BI, `(Blank)` dikecualikan agar 10 baris teratas menampilkan kategori produk valid dan mengaktifkan *tooltip* `Weighted Freight Ratio`.
-- **Menjaga *single-direction* model & memakai `CROSSFILTER` di DAX `Delivered GMV`:** Menghindari ambiguitas jalur filter antar-tabel fakta sekaligus memungkinkan *filter* kategori produk memengaruhi `Delivered GMV` secara terkendali.
+| ID | Temuan | Keputusan | Alasan |
+| :--- | :--- | :--- | :--- |
+| D01 | Nilai produk juga ada pada status non-*delivered* | Metrik hanya dari pesanan *delivered* | Hanya itu yang terealisasi |
+| D02 | 8 pesanan *delivered* tanpa tanggal terima (96,478 → 96,470) | Dikeluarkan dari analisis keterlambatan | Keterlambatan tidak bisa dihitung |
+| D03 | Kolom harga, tanggal, dan skor bertipe teks | Dikonversi sekali di `v_order_base` | Menghindari `CAST` berulang dan salah tipe |
+| D04 | Satu pesanan bisa punya beberapa ulasan | Skor diringkas jadi rata-rata per pesanan | Satu pesanan harus satu baris |
+| D05 | Impor awal `products` terpotong di 4,096 baris (98,511 dari 112,650 item tanpa produk) | Diimpor ulang; audit kelengkapan impor ditambahkan | Tanpa itu 87.4% GMV berlabel `unknown` |
+| D06 | Bulan awal dan akhir dataset sangat tipis | Tren bulanan hanya 2017-01 s.d. 2018-08 | Menghindari lonjakan atau penurunan palsu |
+| D07 | Bad Review % bisa dihitung per ulasan atau per pesanan | Dipakai per pesanan (selisih 0.04 poin) | Konsisten dengan satuan analisis lain |
+| D08 | Produk tanpa kategori atau terjemahan | `LEFT JOIN` dengan label `unknown` | Total kategori tetap sama dengan total GMV |
+| D09 | Kategori kecil bisa mendominasi ranking rasio ongkir | Ambang minimal 500 item | Menyaring kategori dengan volume tidak berarti; ambang bisa disesuaikan |
+| D10 | Analisis rute hanya tersedia pada state tujuan | Konsentrasi dianalisis per `customer_state` | Asal penjual tidak dipakai |
+| D11 | Hubungan keterlambatan dan ulasan bersifat historis | Ditulis sebagai asosiasi, dampak sebagai skenario bersyarat | Faktor lain tidak dikendalikan |
 
 ---
 
 ## Batasan Analisis
 
-- **Asosiasi vs. kausalitas:** Perbedaan skor ulasan, proporsi ulasan buruk, dan *repeat purchase rate* pada pesanan terlambat mencerminkan pola historis pada data, bukan bukti kausalitas tunggal.
-- **Bias ulasan pelanggan:** Tidak seluruh pesanan memiliki ulasan (`order_reviews`), dan pelanggan yang mengalami pengalaman ekstrem cenderung lebih sering memberikan ulasan.
-- **Estimasi pengiriman yang cenderung longgar:** Selisih rata-rata keseluruhan `-11.88` hari menunjukkan tanggal estimasi Olist memiliki penyangga waktu yang relatif lebar, sehingga keterlambatan aktual terjadi ketika pengiriman melewati batas estimasi tersebut.
-- **Periode data historis & bulan awal/akhir parsial:** Dataset Olist merupakan data historis dengan volume transaksi yang lebih tipis/parsial pada bulan awal dan akhir rentang waktu, sehingga pembacaan tren bulanan perlu memperhatikan kelengkapan periode.
-- **GMV bukan laba bersih:** Nilai GMV / nilai produk (`R$`) mencerminkan nilai transaksi barang dalam *Brazilian Real* (`BRL`), belum memperhitungkan ongkos kirim, diskon/biaya promosi, komisi *marketplace*, maupun biaya operasional/HPP.
+- **Asosiasi vs. kausalitas:** perbedaan skor, ulasan buruk, dan *repeat rate* pada pesanan terlambat adalah pola historis. Faktor lain (jenis produk, jarak, harga) tidak dikendalikan.
+- **Bias ulasan:** tidak semua pesanan punya ulasan (494 tepat waktu dan 153 terlambat tidak), dan pelanggan dengan pengalaman ekstrem lebih sering menulis ulasan.
+- **Estimasi longgar:** estimasi tiba rata-rata 24.4 hari vs aktual 12.5 hari, sehingga "terlambat" berarti melewati estimasi yang sudah berpenyangga lebar, bukan melewati waktu kirim wajar.
+- **Cakupan rute:** analisis memakai state tujuan pelanggan, bukan pasangan asal–tujuan. Pesanan multi-penjual dihitung untuk tiap penjual pada analisis penjual.
+- **Periode data:** data historis 2016–2018 dengan bulan awal dan akhir yang tipis; tren bulanan dibatasi pada bulan lengkap.
+- **GMV bukan laba:** GMV adalah nilai produk dalam BRL, belum memperhitungkan ongkir, diskon, komisi, atau biaya operasional.
 
 ---
 
 ## Panduan Reproducibility (Cara Menjalankan Ulang)
 
-1. **Siapkan Database:** Buat database `db_olist` di **MySQL Server 8.0** dan impor tabel dataset *Brazilian E-Commerce Public Dataset by Olist* dari Kaggle.
-2. **Audit Data:** Jalankan `01_data_cleaning_and_audit.sql` untuk memverifikasi kelengkapan data, tipe kolom, dan distribusi status pesanan.
-3. **Bangun *View* & Rekonsiliasi:** Jalankan `02_view_and_reconcilation.sql` untuk membuat `v_order_base` dan `v_order_summary` beserta kueri rekonsiliasi jumlah baris dan total GMV.
-4. **Jalankan Analisis Bisnis & Operasional:** Jalankan `03_business_and_operational_analysis.sql` untuk menghasilkan tren bulanan, metode pembayaran, kategori produk, gradasi keterlambatan, kinerja rute/penjual, rasio ongkir tertimbang, dan *repeat purchase rate*.
-5. **Buka & Validasi Dashboard Power BI:** Buka `dashboard_ecommerce_performance.pbix` di Power BI Desktop, pastikan *slicer* `Year Month` berada pada `All`, periksa koneksi model bintang (`Fact_Orders`, `Fact_OrderItems`, `Dim_Products`, `Dim_Date`, `Dim_Sellers`) serta rumus DAX `Delivered GMV`, dan tinjau ketiga visual utama (*Delivered GMV and Delivered Orders*, *Late Delivery % and Bad Review % Trend*, dan *Top 10 Product Categories by Delivered GMV*).
+1. **Database:** buat `db_olist` di **MySQL 8.0**. Impor file CSV Kaggle ke tabel berikut; semua kolom diimpor sebagai teks dan dikonversi di `v_order_base`.
+
+| File CSV | Tabel |
+| :--- | :--- |
+| `olist_orders_dataset.csv` | `orders` |
+| `olist_customers_dataset.csv` | `customers` |
+| `olist_order_items_dataset.csv` | `order_items` |
+| `olist_order_payments_dataset.csv` | `order_payments` |
+| `olist_order_reviews_dataset.csv` | `order_reviews` |
+| `olist_products_dataset.csv` | `products` |
+| `olist_sellers_dataset.csv` | `sellers` |
+| `product_category_name_translation.csv` | `product_category_name_translation` |
+
+2. **Cek kelengkapan impor:** jumlah baris tiap tabel harus sama dengan CSV-nya (mis. `order_items` 112,650 dan `products` 32,951). Audit kelengkapan impor ada di `01_data_cleaning_and_audit.sql`.
+3. **Audit data:** jalankan `01_data_cleaning_and_audit.sql` (status, tanggal kosong, ulasan ganda, kategori, kelengkapan bulan dan impor).
+4. **View & rekonsiliasi:** jalankan `02_view_and_reconciliation.sql` untuk membuat `v_order_base` dan `v_order_summary` serta menguji jumlah baris dan total GMV.
+5. **Analisis:** jalankan `03_business_and_operational_analysis.sql` (tren, lokasi, pembayaran, kategori, ongkir, keterlambatan, ulasan, konsentrasi, dan *repeat purchase*).
+6. **Dashboard:** buka `dashboard_ecommerce_performance.pbix` di Power BI Desktop, segarkan data dari MySQL, pastikan *slicer* `Year Month` pada `All`, dan cocokkan KPI dengan hasil SQL.
 
 ---
 
@@ -129,3 +213,4 @@ File laporan interaktif tersedia pada [dashboard_ecommerce_performance.pbix](das
 ├── dashboard_ecommerce_performance.pbix
 ├── olist_dashboard.png
 └── README.md
+```
